@@ -1,0 +1,8 @@
+conda deactivate
+conda activate tf
+
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Restricted
+
+pip install mysql-connector-python
+pip install scikit-learn

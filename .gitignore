@@ -1,0 +1,8 @@
+# gitignore
+.vscode/
+scalers/
+test/
+train_logs/
+trained_model/
+.env
+test_model/
