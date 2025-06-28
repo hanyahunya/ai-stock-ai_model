@@ -1,8 +1,12 @@
 # gitignore
-.vscode/
-scalers/
-test/
-train_logs/
-trained_model/
-.env
-test_model/
+*
+
+
+!ai_model/
+!ai_model/**
+
+!server.py
+!pip.txt
+
+!md_logs/
+!md_logs/**

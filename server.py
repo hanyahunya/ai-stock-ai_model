@@ -37,6 +37,7 @@ def fetch_and_run(stockCode):
     conn.close()
 
     rows = rows[:-6] # 최근 6일데이터는 y값이 없기에 학습에서 제외
+    
 
     x_data = [row[0:15] for row in rows]
 
@@ -45,7 +46,7 @@ def fetch_and_run(stockCode):
     train_model(x_data, y_data, stockCode)
     print("백그라운드 작업 완료")
 
-def inference_run(stockCode):
+def inference_run(stockCode, date):
     print("백그라운드 작업 시작")
 
     conn = mysql.connector.connect(
@@ -67,20 +68,21 @@ def inference_run(stockCode):
                shrts_qty, ovr_shrts_qty, trde_wght, shrts_trde_price, shrts_avg_pric,
                date
             FROM daily_stock
-            WHERE stock_code = %s         and date < '2024-11-01'
+            WHERE stock_code = %s         and date < %s
             ORDER BY date DESC
-            LIMIT 45
+            LIMIT 30
         ) AS recent
         ORDER BY date ASC; 
         """,
-        (stockCode,)
+        (stockCode, date)
     )
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
 
     x_data = [row[0:15] for row in rows]
-    inference(x_data, stockCode)
+    res = inference(x_data, stockCode)
+    return res
 
 @app.route("/train/<stockCode>", methods=["POST"])
 def train_stock(stockCode):
@@ -100,16 +102,15 @@ def train_stock(stockCode):
 
     return jsonify({"status": "OK", "message": f"{stockCode} 학습 시작됨"}), 202
 
-@app.route("/inference/<stockCode>", methods=["GET"])
-def inference_stock(stockCode):
+@app.route("/inference/<stockCode>/<date>", methods=["GET"])
+def inference_stock(stockCode, date):
     if len(stockCode) != 6 or not stockCode.isdigit():
         return jsonify({"error": "Invalid stockCode"}), 400
 
     # 백그라운드 스레드 시작
-    thread = Thread(target=inference_run, args=(stockCode,))
-    thread.start()
+    res = inference_run(stockCode, date)
 
-    return jsonify({"status": "OK"}), 200
+    return res
 
 if __name__ == "__main__":
     # Thread(target=fetch_and_run, args=("005930",), daemon=True).start()

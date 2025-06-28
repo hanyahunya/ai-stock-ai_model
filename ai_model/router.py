@@ -14,7 +14,7 @@ import numpy as np
 def make_lstm_dataset(
     X_raw: np.ndarray,
     y_raw: Optional[np.ndarray] = None,
-    sequence_length: int = 45
+    sequence_length: int = 30
 ) -> Tuple[np.ndarray, Optional[np.ndarray]]:
     X_seq, y_seq = [], []
 
@@ -64,8 +64,8 @@ def train_model(x_data, y_data, stockCode):
     save_scalers_y(y_highest_scalers, "highest", stockCode)
 
     # 학습 요청
-    # train_ai_model(*make_lstm_dataset(x_volume_np, y_highest_np), stockCode, "volume", "highest")
-    # train_ai_model(*make_lstm_dataset(x_investor_np, y_highest_np), stockCode, "investor", "highest")
+    train_ai_model(*make_lstm_dataset(x_volume_np, y_highest_np), stockCode, "volume", "highest")
+    train_ai_model(*make_lstm_dataset(x_investor_np, y_highest_np), stockCode, "investor", "highest")
     train_ai_model(*make_lstm_dataset(x_short_np, y_highest_np), stockCode, "short", "highest")
 
     # train_ai_model(*make_lstm_dataset(x_volume_np, y_lowest_ratio_np), stockCode, "lowest")
@@ -152,34 +152,37 @@ def inference(x_data, stockCode):
     x_investor_data = make_lstm_dataset(x_investor_np)[0]
     x_short_data = make_lstm_dataset(x_short_np)[0]
 
-    # x_volume_ready = x_volume_data.reshape(1, x_volume_data.shape[1], x_volume_data.shape[2])
-    # x_investor_ready = x_investor_data.reshape(1, x_investor_data.shape[1], x_investor_data.shape[2])
+    x_volume_ready = x_volume_data.reshape(1, x_volume_data.shape[1], x_volume_data.shape[2])
+    x_investor_ready = x_investor_data.reshape(1, x_investor_data.shape[1], x_investor_data.shape[2])
     x_short_ready = x_short_data.reshape(1, x_short_data.shape[1], x_short_data.shape[2])
 
-    # y_volume = volume_model.predict(x_volume_ready, verbose = 1)
+    y_volume = volume_model.predict(x_volume_ready, verbose = 1)
     print("\n\n")
-    # y_investor = investor_model.predict(x_investor_ready, verbose = 1)
-    # print("\n\n")
+    y_investor = investor_model.predict(x_investor_ready, verbose = 1)
+    print("\n\n")
     y_short = short_model.predict(x_short_ready, verbose = 1)
     print("\n\n")
     print("\n\n")
 
-    # y1 = norm.denormalize_1d_array([y_volume.ravel()[0]], y_highest_scaler)
-    # y2 = norm.denormalize_1d_array([y_investor.ravel()[0]], y_highest_scaler)
+    y1 = norm.denormalize_1d_array([y_volume.ravel()[0]], y_highest_scaler)
+    y2 = norm.denormalize_1d_array([y_investor.ravel()[0]], y_highest_scaler)
     y3 = norm.denormalize_1d_array([y_short.ravel()[0]], y_highest_scaler)
 
-    # print(f"volume   {y1}")
-    # print(f"investor {y2}")
+    print(f"volume   {y1}")
+    print(f"investor {y2}")
     print(f"short    {y3}")
+
+
 
     # print(f"volume   {y_volume}")
     # print(f"investor {y_investor}")
     # print(f"short    {y_short}")
 
-    del volume_model                                # 파이썬 레벨에서 참조 제거
-    tf.keras.backend.clear_session()         # 그래프·GPU 메모리 해제
 
-    return
+    from flask import  jsonify
+    average = (y1[0] + y2[0] + y3[0]) / 3
+    return jsonify(average)
+
 
 
 
@@ -223,7 +226,7 @@ def train_model1(x_data, y_data, stockCode):
     save_scalers_y(y_highest_scalers, "highest", stockCode)
 
     # 학습 요청
-    # train_ai_model(*make_lstm_dataset(x_volume_np, y_highest_np), stockCode, "volume", "highest")
+    train_ai_model(*make_lstm_dataset(x_volume_np, y_highest_np), stockCode, "volume", "highest")
     # train_ai_model(*make_lstm_dataset(x_investor_np, y_highest_np), stockCode, "investor", "highest")
     # train_ai_model(*make_lstm_dataset(x_short_np, y_highest_np), stockCode, "short", "highest")
 
@@ -231,7 +234,7 @@ def train_model1(x_data, y_data, stockCode):
     # train_lowest_investor_model(*make_lstm_dataset(x_investor_np, y_lowest_ratio_np))
     # train_lowest_short_model(*make_lstm_dataset(x_short_np, y_lowest_ratio_np))
 
-    train_ai_model(*make_lstm_dataset(x_volume_np, y_is_up), stockCode, "volume", "is_up")
+    # train_ai_model(*make_lstm_dataset(x_volume_np, y_is_up), stockCode, "volume", "is_up")
 
 
     # train_ai_model(*make_lstm_dataset(x_volume_np, y_is_down), stockCode, "is_down")
@@ -246,7 +249,7 @@ def inference1(x_data, stockCode):
     # 학습시와 같은 배열로 끊기
     x_volume, x_investor, x_short = [], [], []
     for row in x_data:
-        base = list(row[0:4])  # 시가, 고가, 저가, 종가, #등락률0:5
+        base = list(row[0:5])  # 시가, 고가, 저가, 종가, #등락률0:5
 
         x_v = base + [row[5:15]]                  # + volume
      
