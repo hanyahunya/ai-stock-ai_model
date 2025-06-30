@@ -1,4 +1,3 @@
-
 #  프로토타입
 ## 1. 입력(X) 데이터
 - **시가·고가·저가·종가** (원화 절대값)
@@ -40,7 +39,7 @@
 ---
 
 ## 5. 학습 결과
-![Loss vs Val_Loss](images/25-06-24_prototype.png)
+![Loss vs Val_Loss](../images/25-06-24_prototype.png)
 
 ### 그래프 해석
 1. **0 – 5 epoch**  
