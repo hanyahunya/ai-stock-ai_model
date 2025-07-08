@@ -112,10 +112,10 @@ def train_ai_model(X, Y, stockCode, x_type, y_type, epochs=2000, validation_spli
         ## 오차가 엄청 커질수 있음 -> 오차분포의 표준편차정도를 쓰면 된다네요
         ## 이상치가 많아서 큰오차를 덜 민감하게 -> delta를 작게 (예:0.5)
         ## 이상치가 거의없고 세밀한 차이를 강조하고싶을떄 -> delta를 크게 (예:5.0)   
-        model.compile(optimizer=optimizer, loss='mse', metrics=['mae'])
+        # model.compile(optimizer=optimizer, loss='mse', metrics=['mae'])
 
-        # loss_fn = Huber(delta=1.0)
-        # model.compile(optimizer=optimizer, loss=loss_fn, metrics=['mse'])
+        loss_fn = Huber(delta=0.1)
+        model.compile(optimizer=optimizer, loss=loss_fn, metrics=['mse'])
     
     # 다중 클래스 분류용 손실함수는 categorical_crossentropy / sparse_categorical_crossentropy 가 있다네요
 
