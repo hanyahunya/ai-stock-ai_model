@@ -82,7 +82,7 @@ def normalize_2d_array(
     return normalized, (g_min, g_max), scalers
 
 
-def denormalize_2d_array(norm_arr_2d, group_min_max, other_scalers):
+def denormalize_2d_array1(norm_arr_2d, group_min_max, other_scalers):
     norm_arr_2d = np.array(norm_arr_2d)
     group_min, group_max = group_min_max
 
@@ -102,3 +102,97 @@ def denormalize_2d_array(norm_arr_2d, group_min_max, other_scalers):
 
     return restored_all
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ───────── 정규화 ─────────
+def normalize_2d_array(
+    arr_2d,
+    shared_idx: List[int],                       # 공통 스케일 열
+    g_min: Optional[float] = None,
+    g_max: Optional[float] = None,
+    other_scalers: Optional[List[MinMaxScaler]] = None,
+):
+    """
+    - shared_idx 열 가운데 NaN 이 하나라도 있으면 해당 행을 DROP.
+    - 그 뒤 공통 스케일러(OHLC·MA 등)와 개별 스케일러를 적용.
+    """
+    arr_2d = np.asarray(arr_2d, dtype=np.float32)
+
+    # ── 1) NaN 행 제거 ───────────────────────────────────
+    mask_valid = ~np.isnan(arr_2d[:, shared_idx]).any(axis=1)
+    arr_2d = arr_2d[mask_valid]                  # NaN 포함 행이 모두 사라짐
+
+    # ── 2) 공통 스케일 ───────────────────────────────────
+    shared_cols = arr_2d[:, shared_idx]
+
+    if g_min is None or g_max is None:           # fit
+        g_min = shared_cols.min()
+        g_max = shared_cols.max()
+
+    shared_norm = (shared_cols - g_min) / (g_max - g_min + 1e-9)
+
+    # ── 3) 개별 스케일 ───────────────────────────────────
+    other_idx = [i for i in range(arr_2d.shape[1]) if i not in shared_idx]
+    norm_cols, scalers = [], []
+
+    if other_scalers is None:                    # fit
+        for idx in other_idx:
+            sc = MinMaxScaler()
+            col_norm = sc.fit_transform(arr_2d[:, idx].reshape(-1, 1))
+            norm_cols.append(col_norm)
+            scalers.append(sc)
+    else:                                        # transform
+        if len(other_scalers) != len(other_idx):
+            raise ValueError("스케일러 개수가 맞지 않습니다.")
+        for idx, sc in zip(other_idx, other_scalers):
+            norm_cols.append(sc.transform(arr_2d[:, idx].reshape(-1, 1)))
+        scalers = other_scalers
+
+    # ── 4) 병합(원래 순서 유지) ───────────────────────────
+    normalized = np.empty_like(arr_2d, dtype=np.float32)
+    normalized[:, shared_idx] = shared_norm
+    normalized[:, other_idx]  = np.hstack(norm_cols)
+
+    return normalized, (g_min, g_max), scalers
+
+
+
+# ───────── 역-정규화 ─────────
+def denormalize_2d_array(
+    norm_arr_2d,
+    shared_idx: List[int],
+    group_min_max: Tuple[float, float],
+    other_scalers: List[MinMaxScaler],
+):
+    norm_arr_2d = np.asarray(norm_arr_2d, dtype=np.float32)
+    g_min, g_max = group_min_max
+
+    # ── 공통 스케일 역변환
+    shared_denorm = norm_arr_2d[:, shared_idx] * (g_max - g_min) + g_min
+
+    # ── 개별 스케일 역변환
+    other_idx = [i for i in range(norm_arr_2d.shape[1]) if i not in shared_idx]
+    restored_cols = []
+    for idx, sc in zip(other_idx, other_scalers):
+        col = norm_arr_2d[:, idx].reshape(-1, 1)
+        restored_cols.append(sc.inverse_transform(col))
+
+    # ── 병합(원래 순서 유지)
+    restored_all = np.empty_like(norm_arr_2d, dtype=np.float32)
+    restored_all[:, shared_idx] = shared_denorm
+    restored_all[:, other_idx]  = np.hstack(restored_cols)
+
+    return restored_all
