@@ -41,7 +41,7 @@ def normalize_2d_array_old_version(arr_2d):
 
     return normalized_all, (group_min, group_max), other_scalers
 
-def normalize_2d_array(
+def normalize_2d_array1(
     arr_2d,
     x_group_min: Optional[float] = None,
     x_group_max: Optional[float] = None,

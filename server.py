@@ -3,6 +3,7 @@ import mysql.connector
 import os
 from threading import Thread
 from ai_model.router import train_model, inference
+from technical_indicator.ma import add_ma
 
 app = Flask(__name__)
 
@@ -18,6 +19,12 @@ def fetch_and_run(stockCode):
     )
     cursor = conn.cursor()
 
+    date = '2006-01-01'
+    if(stockCode == "005930"):
+        date = '2006-01-01'
+    elif(stockCode == "035720"):
+        date = '2008-06-22'
+
     cursor.execute(
         """
         SELECT open_price, high_price, low_price, close_price, price_change_rate,
@@ -26,22 +33,26 @@ def fetch_and_run(stockCode):
                highest_ratio_7_days, lowest_ratio_7_days,
                is_up_3_percent_in_7_days, is_down_3_percent_in_7_days
         FROM daily_stock
-        WHERE stock_code = %s and date > '2006-01-01'
+        WHERE stock_code = %s and date > %s
         ORDER BY date ASC
         """,
         #and date > '2010-01-01'
-        (stockCode,)
+        (stockCode, date,)
     )
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
 
     rows = rows[:-6] # 최근 6일데이터는 y값이 없기에 학습에서 제외
-    
 
-    x_data = [row[0:15] for row in rows]
+    # x_data = [row[0:15] for row in rows]
+    x_data = [list(row[0:15]) for row in rows]
+    add_ma(x_data)
+    del x_data[:120]
+    print(x_data)
 
     y_data = [row[15:] for row in rows]
+    del y_data[:120]
 
     train_model(x_data, y_data, stockCode)
     print("백그라운드 작업 완료")
@@ -70,7 +81,7 @@ def inference_run(stockCode, date):
             FROM daily_stock
             WHERE stock_code = %s         and date < %s
             ORDER BY date DESC
-            LIMIT 30
+            LIMIT 150
         ) AS recent
         ORDER BY date ASC; 
         """,
@@ -80,8 +91,10 @@ def inference_run(stockCode, date):
     cursor.close()
     conn.close()
 
-    x_data = [row[0:15] for row in rows]
-    res = inference(x_data, stockCode)
+    x_data = [list(row[0:15]) for row in rows]
+    add_ma(x_data)
+    x_data_recent = x_data[-30:]
+    res = inference(x_data_recent, stockCode)
     return res
 
 @app.route("/train/<stockCode>", methods=["POST"])
@@ -113,6 +126,6 @@ def inference_stock(stockCode, date):
     return res
 
 if __name__ == "__main__":
-    # Thread(target=fetch_and_run, args=("005930",), daemon=True).start()
+    Thread(target=fetch_and_run, args=("005930",), daemon=True).start()
     app.run(host="127.0.0.1", port=5000, use_reloader=False)
 

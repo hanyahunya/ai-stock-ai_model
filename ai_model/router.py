@@ -52,13 +52,15 @@ def train_model(x_data, y_data, stockCode):
         base = list(row[0:6]) # 시고저종 등락률 거래량 0 1 2 3 4 5
 
         # x_volume.append(base + [row[5]]) # ohlc + 거래량
-        x_volume.append(base + list(row[15:]) + list(row[6:15])) # 시고저종, 거래량, 
+        # x_volume.append(base + list(row[15:]) + list(row[6:15])) # 시고저종, 거래량, 
+        x_volume.append(list(row[15:20]) + [row[15]])
 
         x_investor.append(base + list(row[6:10]))
         x_short.append(base + list(row[10:15]))
 
     # OHLC(0~3)만 공통 스케일러로 묶음 ↓↓↓
-    x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0, 1, 2, 3, 6, 7, 8, 9, 10])
+    # x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0, 1, 2, 3, 6, 7, 8, 9, 10])
+    x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0,1,2,3,4])
 
     x_investor_np, (x_investor_group_min, x_investor_group_max), x_investor_other_scalers = \
         norm.normalize_2d_array(x_investor, shared_idx=[0, 1, 2, 3])
@@ -114,7 +116,9 @@ def inference(x_data, stockCode):
         base = list(row[0:6])                 # 시가·고가·저가·종가
         # x_volume.append(base + [row[5]] + list(row[15:20]) + [row[20]])        # + volume
 
-        x_volume.append(base + list(row[15:]) + list(row[6:15])) # 시고저종, 거래량, 
+        # x_volume.append(base + list(row[15:]) + list(row[6:15])) # 시고저종, 거래량, 
+
+        x_volume.append(list(row[15:20]) + [row[15]])
 
         x_investor.append(base + list(row[6:10]))   # + 개인·외국인·기관·프로그램
         x_short.append(base + list(row[10:15]))     # + 공매도·기술지표
@@ -122,49 +126,50 @@ def inference(x_data, stockCode):
     # group_min/max  : 0~3열(가격군) 공통 스케일
     # other_scalers  : 4번 이후 각 열 독립 MinMaxScaler
     x_volume_scaler   = joblib.load(f"scalers/{stockCode}/X_volume.pkl")
-    x_investor_scaler = joblib.load(f"scalers/{stockCode}/X_investor.pkl")
-    x_short_scaler    = joblib.load(f"scalers/{stockCode}/X_short.pkl")
+    # x_investor_scaler = joblib.load(f"scalers/{stockCode}/X_investor.pkl")
+    # x_short_scaler    = joblib.load(f"scalers/{stockCode}/X_short.pkl")
 
     #   shared_idx=[0,1,2,3] → OHLC 네 열만 공통 스케일러 사용
     x_volume_np = norm.normalize_2d_array(
         x_volume,
-        shared_idx=[0, 1, 2, 3, 6, 7, 8, 9, 10],
+        # shared_idx=[0, 1, 2, 3, 6, 7, 8, 9, 10],
+        shared_idx=[0,1,2,3,4],
         g_min=x_volume_scaler["group_min"],
         g_max=x_volume_scaler["group_max"],
         other_scalers=x_volume_scaler["other_scalers"]
     )[0]
 
-    x_investor_np = norm.normalize_2d_array(
-        x_investor,
-        shared_idx=[0, 1, 2, 3],
-        g_min=x_investor_scaler["group_min"],
-        g_max=x_investor_scaler["group_max"],
-        other_scalers=x_investor_scaler["other_scalers"]
-    )[0]
+    # x_investor_np = norm.normalize_2d_array(
+    #     x_investor,
+    #     shared_idx=[0, 1, 2, 3],
+    #     g_min=x_investor_scaler["group_min"],
+    #     g_max=x_investor_scaler["group_max"],
+    #     other_scalers=x_investor_scaler["other_scalers"]
+    # )[0]
 
-    x_short_np = norm.normalize_2d_array(
-        x_short,
-        shared_idx=[0, 1, 2, 3],
-        g_min=x_short_scaler["group_min"],
-        g_max=x_short_scaler["group_max"],
-        other_scalers=x_short_scaler["other_scalers"]
-    )[0]
+    # x_short_np = norm.normalize_2d_array(
+    #     x_short,
+    #     shared_idx=[0, 1, 2, 3],
+    #     g_min=x_short_scaler["group_min"],
+    #     g_max=x_short_scaler["group_max"],
+    #     other_scalers=x_short_scaler["other_scalers"]
+    # )[0]
 
     # ───────────────── 모델 로드 ──────────────────
     #   ※ “is_up” 모델 사용. (highest 모델을 쓰려면 주석 변경)
     volume_model   = load_model(f"trained_model/{stockCode}/is_up_volume.h5")
-    investor_model = load_model(f"trained_model/{stockCode}/is_up_investor.h5")
-    short_model    = load_model(f"trained_model/{stockCode}/is_up_short.h5")
+    # investor_model = load_model(f"trained_model/{stockCode}/is_up_investor.h5")
+    # short_model    = load_model(f"trained_model/{stockCode}/is_up_short.h5")
 
     # ───────────────── LSTM 시퀀스 변환 ──────────────
     x_volume_seq   = make_lstm_dataset(x_volume_np)[0]
-    x_investor_seq = make_lstm_dataset(x_investor_np)[0]
-    x_short_seq    = make_lstm_dataset(x_short_np)[0]
+    # x_investor_seq = make_lstm_dataset(x_investor_np)[0]
+    # x_short_seq    = make_lstm_dataset(x_short_np)[0]
 
     # (batch=1, seq_len, feat) 형태로 reshape
     x_volume_ready   = x_volume_seq.reshape(1, x_volume_seq.shape[1], x_volume_seq.shape[2])
-    x_investor_ready = x_investor_seq.reshape(1, x_investor_seq.shape[1], x_investor_seq.shape[2])
-    x_short_ready    = x_short_seq.reshape(1, x_short_seq.shape[1], x_short_seq.shape[2])
+    # x_investor_ready = x_investor_seq.reshape(1, x_investor_seq.shape[1], x_investor_seq.shape[2])
+    # x_short_ready    = x_short_seq.reshape(1, x_short_seq.shape[1], x_short_seq.shape[2])
 
     # ───────────────── 예측 ──────────────────────
     y_volume   = volume_model.predict(x_volume_ready,   verbose=1)

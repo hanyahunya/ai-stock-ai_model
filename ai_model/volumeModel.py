@@ -2,6 +2,7 @@ import numpy as np
 import os
 import datetime
 import json
+import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.optimizers import Adam, RMSprop
@@ -34,7 +35,8 @@ def train_ai_model(X, Y, stockCode, x_type, y_type, epochs=2000, validation_spli
     n_layers = params["layers"] # 레이어수 int
     learning_rate = params["learning_rate"] # 학습률 0.00001 같은거. <- 경사하강법에서 기울기에 얼마나 곱해서 이동시킬지
     batch_size = params["batch_size"] # 배치 <- 1000개의 X 시계열데이터가 있을때, 배치 수만큼 묶어서 학습
-    
+
+
     print("\n\n")
     print(params)
     print("\n\n")
@@ -53,20 +55,20 @@ def train_ai_model(X, Y, stockCode, x_type, y_type, epochs=2000, validation_spli
     model = Sequential()
     for i in range(n_layers):
         units = params[f"nodes_layer{i+1}"]
-        # dropout_rate = params[f"dropout_l{i}"] #-----드롭아웃끔 나중에 과적합일때 다시키쇼-----<과적합>------------------
+        dropout_rate = params[f"dropout_l{i}"] #-----드롭아웃끔 나중에 과적합일때 다시키쇼-----<과적합>------------------
         return_seq = (i < n_layers - 1) # 만약 지금이 마지막 레이어면 false -> lstm에서 다음 레이어에 시퀀스 전달안함
         if i == 0:
             # 첫번째 lstm레이어에선 입력차원( X데이터를 넣을 텐서의 모양 )에 (batch수, 시계열길이(60일), 피처수(open_price, close_price, volume, ...))
             # 를 넣는데 batch수는 나중에 model.fit에서 설정가능.
-            model.add(LSTM(units=units, return_sequences=return_seq, input_shape=(X.shape[1], X.shape[2])))
-            # model.add(LSTM(units=units, return_sequences=return_seq, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2_reg, bias_regularizer=l2_reg))  #-----------------------------L2정규화-------------------
+            # model.add(LSTM(units=units, return_sequences=return_seq, input_shape=(X.shape[1], X.shape[2])))
+            model.add(LSTM(units=units, return_sequences=return_seq, input_shape=(X.shape[1], X.shape[2]), kernel_regularizer=l2_reg, bias_regularizer=l2_reg))  #-----------------------------L2정규화-------------------
         else:
             #두번째 레이어 이상부턴 x텐서모양 설정 안해줘도됨
-            model.add(LSTM(units=units, return_sequences=return_seq))
-            # model.add(LSTM(units=units, return_sequences=return_seq, kernel_regularizer=l2_reg, bias_regularizer=l2_reg)) #-----------------------------L2정규화-------------------
+            # model.add(LSTM(units=units, return_sequences=return_seq))
+            model.add(LSTM(units=units, return_sequences=return_seq, kernel_regularizer=l2_reg, bias_regularizer=l2_reg)) #-----------------------------L2정규화-------------------
         # 한레이어 뒤에 과적합 방지를 위해 드롭아웃 레이어 추가. **드롭아웃 안붙히거나 환경변수에서 레이어에 맞게 드롭아웃값 안넣어줬을땐 로직 변경 필요**(중요)
 
-        # model.add(Dropout(dropout_rate)) # --------------------------------드롭아웃----------------------------------
+        model.add(Dropout(dropout_rate)) # --------------------------------드롭아웃----------------------------------
 
     # 옵티마이저 경사하강법 그거. 손실함수의 값을 작게하는게 옵티마이저
     #
@@ -90,7 +92,13 @@ def train_ai_model(X, Y, stockCode, x_type, y_type, epochs=2000, validation_spli
         model.add(Dense(1, activation='sigmoid'))
         # 이진분류용 loss(손실함수)
         # binary_crossentropy <- y값이 0, 1일때 사용. 로그기반이라 예측이 틀릴수록 손실을 크게줌.
-        model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy']) # metrics는 그냥 보여주기용, 역전파안함(학습안함)
+        model.compile(optimizer=optimizer, loss='binary_crossentropy', 
+                      metrics=[
+                          'accuracy', tf.keras.metrics.AUC(name="auc"), 
+                          tf.keras.metrics.Precision(thresholds=0.4, name="prec"), 
+                          tf.keras.metrics.Recall(thresholds=0.4, name="recall"),
+                      ]
+        ) # metrics는 그냥 보여주기용, 역전파안함(학습안함)
     else:
         model.add(Dense(1))
         # 회귀용 loss(손실함수)
