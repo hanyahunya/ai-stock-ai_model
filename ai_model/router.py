@@ -49,18 +49,28 @@ def train_model(x_data, y_data, stockCode):
     # X 데이터 분리
     x_volume, x_investor, x_short = [], [], []
     for row in x_data:
-        base = list(row[0:6]) # 시고저종 등락률 거래량 0 1 2 3 4 5
+        ### X_data_idx.txt 参考
+        ohlc = list(row[0:4])
+        ratio = [row[4]] 
+        volume = [row[5]]
+        investor = list(row[6:10]) # 9/10
+        short = list(row[12:14])
+        ma_data = list(row[15:20]) # 7/10 + 임계값 조정 필요 (전체학습시엔 알아서 모델이 학습함)
+        ma_comp = list(row[20:30]) # 2/10 개선필요 (피처들 조합등으로 사용)
+        ma_diff = list(row[30:35]) # 8/10
+        
+        base = ohlc + volume # 시고저종 등락률 거래량 0 1 2 3 4 5
 
         # x_volume.append(base + [row[5]]) # ohlc + 거래량
         # x_volume.append(base + list(row[15:]) + list(row[6:15])) # 시고저종, 거래량, 
-        x_volume.append(list(row[15:20]) + [row[15]])
+        x_volume.append(ohlc + ma_data + ma_diff + investor)
 
         x_investor.append(base + list(row[6:10]))
         x_short.append(base + list(row[10:15]))
 
     # OHLC(0~3)만 공통 스케일러로 묶음 ↓↓↓
     # x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0, 1, 2, 3, 6, 7, 8, 9, 10])
-    x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0,1,2,3,4])
+    x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0,1,2,3,4,5,6,7,8])
 
     x_investor_np, (x_investor_group_min, x_investor_group_max), x_investor_other_scalers = \
         norm.normalize_2d_array(x_investor, shared_idx=[0, 1, 2, 3])
@@ -118,7 +128,7 @@ def inference(x_data, stockCode):
 
         # x_volume.append(base + list(row[15:]) + list(row[6:15])) # 시고저종, 거래량, 
 
-        x_volume.append(list(row[15:20]) + [row[15]])
+        x_volume.append([row[12]] + [row[13]])
 
         x_investor.append(base + list(row[6:10]))   # + 개인·외국인·기관·프로그램
         x_short.append(base + list(row[10:15]))     # + 공매도·기술지표
@@ -133,7 +143,7 @@ def inference(x_data, stockCode):
     x_volume_np = norm.normalize_2d_array(
         x_volume,
         # shared_idx=[0, 1, 2, 3, 6, 7, 8, 9, 10],
-        shared_idx=[0,1,2,3,4],
+        shared_idx=[0],
         g_min=x_volume_scaler["group_min"],
         g_max=x_volume_scaler["group_max"],
         other_scalers=x_volume_scaler["other_scalers"]
