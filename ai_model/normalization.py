@@ -1,4 +1,4 @@
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 from sklearn.preprocessing import MinMaxScaler
 import numpy as np
 
@@ -15,6 +15,136 @@ def denormalize_1d_array(normalized_arr, scaler):
     original = scaler.inverse_transform(arr_np).ravel()
     return original
 # -------------------2d---------------------
+
+import numpy as np
+from typing import List, Optional, Tuple
+from sklearn.preprocessing import MinMaxScaler
+
+def normalize_2d_array(
+    arr_2d,
+    shared_idx: List[int],  # 공통 스케일 (0~1)
+    g_min: Optional[float] = None,
+    g_max: Optional[float] = None,
+    other_scalers: Optional[List[MinMaxScaler]] = None,
+    minus1to1_idx: Optional[List[int]] = None,               # -1~1 정규화 대상
+    minus1to1_params: Optional[Dict[int, Tuple[float, float]]] = None  # -1~1 스케일 파라미터
+) -> Tuple[np.ndarray, Tuple[float, float], List[MinMaxScaler], Dict[int, Tuple[float, float]]]:
+    arr_2d = np.asarray(arr_2d, dtype=np.float32)
+    if minus1to1_idx is None:
+        minus1to1_idx = []
+    if minus1to1_params is None:
+        minus1to1_params = {}
+
+    # ── 1) NaN 제거 ───────────────────────────────
+    mask_valid = ~np.isnan(arr_2d[:, shared_idx]).any(axis=1)
+    arr_2d = arr_2d[mask_valid]
+
+    # ── 2) 공통 스케일 (0~1) ──────────────────────
+    shared_cols = arr_2d[:, shared_idx]
+    if g_min is None or g_max is None:
+        g_min = shared_cols.min()
+        g_max = shared_cols.max()
+
+    shared_norm = (shared_cols - g_min) / (g_max - g_min + 1e-9)
+
+    # ── 3) -1~1 스케일 ────────────────────────────
+    minus1to1_norm = {}
+    updated_params = {}
+
+    for idx in minus1to1_idx:
+        col = arr_2d[:, idx]
+        if idx in minus1to1_params:
+            mid, scale = minus1to1_params[idx]
+        else:
+            mid = (col.max() + col.min()) / 2
+            scale = (col.max() - col.min()) / 2 + 1e-9
+        norm_col = (col - mid) / scale
+        minus1to1_norm[idx] = norm_col
+        updated_params[idx] = (mid, scale)
+
+    # ── 4) 개별 MinMax 스케일 (0~1) ────────────────
+    norm_cols, scalers = [], []
+    other_idx = [
+        i for i in range(arr_2d.shape[1])
+        if i not in shared_idx and i not in minus1to1_idx
+    ]
+
+    if other_scalers is None:
+        for idx in other_idx:
+            sc = MinMaxScaler()
+            col_norm = sc.fit_transform(arr_2d[:, idx].reshape(-1, 1))
+            norm_cols.append(col_norm)
+            scalers.append(sc)
+    else:
+        if len(other_scalers) != len(other_idx):
+            raise ValueError("스케일러 개수가 맞지 않습니다.")
+        for idx, sc in zip(other_idx, other_scalers):
+            norm_cols.append(sc.transform(arr_2d[:, idx].reshape(-1, 1)))
+        scalers = other_scalers
+
+    # ── 5) 병합 (원래 순서 유지) ───────────────────
+    normalized = np.empty_like(arr_2d, dtype=np.float32)
+    normalized[:, shared_idx] = shared_norm
+    normalized[:, other_idx] = np.hstack(norm_cols)
+    for idx in minus1to1_idx:
+        normalized[:, idx] = minus1to1_norm[idx]
+
+    return normalized, (g_min, g_max), scalers, updated_params
+
+
+def denormalize_2d_array(
+    norm_arr_2d,
+    shared_idx: List[int],
+    group_min_max: Tuple[float, float],
+    other_scalers: List[MinMaxScaler],
+    minus1to1_idx: Optional[List[int]] = None,
+    minus1to1_params: Optional[dict] = None
+) -> np.ndarray:
+    norm_arr_2d = np.asarray(norm_arr_2d, dtype=np.float32)
+    g_min, g_max = group_min_max
+    if minus1to1_idx is None:
+        minus1to1_idx = []
+    if minus1to1_params is None:
+        minus1to1_params = {}
+
+    # ── 1) 공통 스케일 역변환 ──────────────────────
+    shared_denorm = norm_arr_2d[:, shared_idx] * (g_max - g_min) + g_min
+
+    # ── 2) 개별 스케일 역변환 ──────────────────────
+    other_idx = [
+        i for i in range(norm_arr_2d.shape[1])
+        if i not in shared_idx and i not in minus1to1_idx
+    ]
+    restored_cols = []
+    for idx, sc in zip(other_idx, other_scalers):
+        col = norm_arr_2d[:, idx].reshape(-1, 1)
+        restored_cols.append(sc.inverse_transform(col))
+
+    # ── 3) -1~1 역변환 ────────────────────────────
+    minus1to1_restored = {}
+    for idx in minus1to1_idx:
+        mid, scale = minus1to1_params[idx]
+        col = norm_arr_2d[:, idx]
+        minus1to1_restored[idx] = col * scale + mid
+
+    # ── 4) 병합 (원래 순서 유지) ───────────────────
+    restored_all = np.empty_like(norm_arr_2d, dtype=np.float32)
+    restored_all[:, shared_idx] = shared_denorm
+    restored_all[:, other_idx] = np.hstack(restored_cols)
+    for idx in minus1to1_idx:
+        restored_all[:, idx] = minus1to1_restored[idx]
+
+    return restored_all
+
+
+
+
+
+
+
+
+
+
 
 def normalize_2d_array_old_version(arr_2d):
     arr_2d = np.array(arr_2d)  # (n_samples, n_features)
@@ -104,21 +234,8 @@ def denormalize_2d_array1(norm_arr_2d, group_min_max, other_scalers):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 # ───────── 정규화 ─────────
-def normalize_2d_array(
+def normalize_2d_array2(
     arr_2d,
     shared_idx: List[int],                       # 공통 스케일 열
     g_min: Optional[float] = None,
@@ -171,7 +288,7 @@ def normalize_2d_array(
 
 
 # ───────── 역-정규화 ─────────
-def denormalize_2d_array(
+def denormalize_2d_array2(
     norm_arr_2d,
     shared_idx: List[int],
     group_min_max: Tuple[float, float],
@@ -196,3 +313,68 @@ def denormalize_2d_array(
     restored_all[:, other_idx]  = np.hstack(restored_cols)
 
     return restored_all
+
+
+def normalize_2d_array33(
+    arr_2d,
+    shared_idx: List[int],  # 공통 스케일 (0~1)
+    g_min: Optional[float] = None,
+    g_max: Optional[float] = None,
+    other_scalers: Optional[List[MinMaxScaler]] = None,
+    minus1to1_idx: Optional[List[int]] = None  # -1~1 정규화 대상
+) -> Tuple[np.ndarray, Tuple[float, float], List[MinMaxScaler], dict]:
+    arr_2d = np.asarray(arr_2d, dtype=np.float32)
+    if minus1to1_idx is None:
+        minus1to1_idx = []
+
+    # ── 1) NaN 제거 ───────────────────────────────
+    mask_valid = ~np.isnan(arr_2d[:, shared_idx]).any(axis=1)
+    arr_2d = arr_2d[mask_valid]
+
+    # ── 2) 공통 스케일 (0~1) ──────────────────────
+    shared_cols = arr_2d[:, shared_idx]
+    if g_min is None or g_max is None:
+        g_min = shared_cols.min()
+        g_max = shared_cols.max()
+
+    shared_norm = (shared_cols - g_min) / (g_max - g_min + 1e-9)
+
+    # ── 3) -1~1 스케일 ────────────────────────────
+    minus1to1_norm = {}
+    minus1to1_params = {}
+    for idx in minus1to1_idx:
+        col = arr_2d[:, idx]
+        mid = (col.max() + col.min()) / 2
+        scale = (col.max() - col.min()) / 2 + 1e-9
+        norm_col = (col - mid) / scale
+        minus1to1_norm[idx] = norm_col
+        minus1to1_params[idx] = (mid, scale)
+
+    # ── 4) 개별 MinMax 스케일 (0~1) ────────────────
+    norm_cols, scalers = [], []
+    other_idx = [
+        i for i in range(arr_2d.shape[1])
+        if i not in shared_idx and i not in minus1to1_idx
+    ]
+
+    if other_scalers is None:
+        for idx in other_idx:
+            sc = MinMaxScaler()
+            col_norm = sc.fit_transform(arr_2d[:, idx].reshape(-1, 1))
+            norm_cols.append(col_norm)
+            scalers.append(sc)
+    else:
+        if len(other_scalers) != len(other_idx):
+            raise ValueError("스케일러 개수가 맞지 않습니다.")
+        for idx, sc in zip(other_idx, other_scalers):
+            norm_cols.append(sc.transform(arr_2d[:, idx].reshape(-1, 1)))
+        scalers = other_scalers
+
+    # ── 5) 병합 (원래 순서 유지) ───────────────────
+    normalized = np.empty_like(arr_2d, dtype=np.float32)
+    normalized[:, shared_idx] = shared_norm
+    normalized[:, other_idx] = np.hstack(norm_cols)
+    for idx in minus1to1_idx:
+        normalized[:, idx] = minus1to1_norm[idx]
+
+    return normalized, (g_min, g_max), scalers, minus1to1_params
