@@ -6,28 +6,6 @@ import joblib
 from pathlib import Path
 from . import normalization as norm
 import numpy as np
-# import os
-# import json
-# from dotenv import load_dotenv
-# load_dotenv()
-from pprint import pprint
-
-
-# def peek_pair(name_x, name_y, X, y, n=5):
-#     """
-#     X[0] ↔ y[0], X[1] ↔ y[1] … 식으로 앞 n개를 짝지어 출력.
-#     X : 2D 또는 1D (list‧ndarray)
-#     y : 1D (list‧ndarray)
-#     """
-#     X_arr = np.asarray(X, dtype=object)
-#     y_arr = np.asarray(y, dtype=object)
-#     n = min(n, len(X_arr), len(y_arr))
-
-#     print(f"\n┌── {name_x} × {name_y} ── (first {n}) ───────────────")
-#     for i in range(n):
-#         print(f"│ [{i:>4}]  X = {X_arr[i]}   |   y = {y_arr[i]}")
-#     print("└──────────────────────────────────────────────\n")
-
 
 def make_lstm_dataset(
     X_raw: np.ndarray,
@@ -49,38 +27,62 @@ def train_model(x_data, y_data, stockCode):
     # X 데이터 분리
     x_volume, x_investor, x_short = [], [], []
     for row in x_data:
-        ### X_data_idx.txt 参考
-        ohlc = list(row[0:4])
-        ratio = [row[4]] 
-        volume = [row[5]]
-        investor = list(row[6:10]) # 9/10
-        short = list(row[12:14])
-        ma_data = list(row[15:20]) # 7/10 + 임계값 조정 필요 (전체학습시엔 알아서 모델이 학습함)
-        ma_comp = list(row[20:30]) # 2/10 개선필요 (피처들 조합등으로 사용)
-        ma_diff = list(row[30:35]) # 8/10
-        
+        ### X_data_idx.txt 参考         # length
+        ohlc = list(row[0:4])           # -4-
+        ratio = [row[4]]                # -1-
+        volume = [row[5]]               # -1-
+        investor = list(row[6:10])      # -4-        # 9/10
+        short = list(row[12:14])        # -2-
+
+        #------- MA ------  
+        ma_data = list(row[15:20])      # -5-        # 7/10 + 임계값 조정 필요 (전체학습시엔 알아서 모델이 학습함)
+        ma_comp = list(row[20:30])      # -10-       # 2/10 개선필요 (피처들 조합등으로 사용)
+        ma_diff = list(row[30:35])      # -5-        # 8/10
+        ma = ma_data + ma_diff          # -10-
+
+        #------- MACD --------
+        # macd_base = [row[35]]           # -1-
+        # signal = [row[36]]              # -1-
+        # histogram = [row[37]]           # -1-
+        # macd = macd_base + histogram    # -2-     MACD는 MA와 같이 학습하니 오히려 성능이 낮아져서 제외
+
+        #---------Psychological Line----------
+        pl_for_up = [row[35]]
+        pl_for_down = [row[36]]
+
+        #---------RSI--------
+        rsi_data = [row[37]]
+        rsi_for_up = [row[38]]
+        rsi_for_down = [row[39]]
+
         base = ohlc + volume # 시고저종 등락률 거래량 0 1 2 3 4 5
 
         # x_volume.append(base + [row[5]]) # ohlc + 거래량
         # x_volume.append(base + list(row[15:]) + list(row[6:15])) # 시고저종, 거래량, 
-        x_volume.append(ohlc + ma_data + ma_diff + investor)
+        # x_volume.append(rsi_for_up + rsi_for_up)
+        x_volume.append(ma_data + ma_diff + investor + [row[15]] + rsi_for_up)
 
         x_investor.append(base + list(row[6:10]))
         x_short.append(base + list(row[10:15]))
 
     # OHLC(0~3)만 공통 스케일러로 묶음 ↓↓↓
-    # x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0, 1, 2, 3, 6, 7, 8, 9, 10])
-    x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0,1,2,3,4,5,6,7,8])
+    x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0,1,2,3,4]) # ------ 0 ~ 1정규화 -------
+    # x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0]) # ------ 0 ~ 1정규화 ------- <단일피처 중요도 확인용>
+    # x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers, x_volume_minus1to1_params = norm.normalize_2d_array(x_volume, 
+    #                                                                                                         shared_idx=[0,1,2,3,4,5,6,7,8],
+    #                                                                                                         minus1to1_idx=[9, 10, 11, 12, 13    , 14, 15, 16, 17]
+    #                                                                                                         )                     # ---------------------- -1 ~ 1정규화 ----------------
 
-    x_investor_np, (x_investor_group_min, x_investor_group_max), x_investor_other_scalers = \
-        norm.normalize_2d_array(x_investor, shared_idx=[0, 1, 2, 3])
+    # x_investor_np, (x_investor_group_min, x_investor_group_max), x_investor_other_scalers = \
+    #     norm.normalize_2d_array(x_investor, shared_idx=[0, 1, 2, 3])
 
-    x_short_np, (x_short_group_min, x_short_group_max), x_short_other_scalers = \
-        norm.normalize_2d_array(x_short, shared_idx=[0, 1, 2, 3])
+    # x_short_np, (x_short_group_min, x_short_group_max), x_short_other_scalers = \
+    #     norm.normalize_2d_array(x_short, shared_idx=[0, 1, 2, 3])
 
-    save_scalers_x(x_volume_group_min, x_volume_group_max, x_volume_other_scalers, "volume", stockCode)
-    save_scalers_x(x_investor_group_min, x_investor_group_max, x_investor_other_scalers, "investor", stockCode)
-    save_scalers_x(x_short_group_min, x_short_group_max, x_short_other_scalers, "short", stockCode)
+    # save_scalers_x(x_volume_group_min, x_volume_group_max, x_volume_other_scalers, x_volume_minus1to1_params, "volume", stockCode) # ---------------------- -1 ~ 1정규화 ----------------
+    save_scalers_x1(x_volume_group_min, x_volume_group_max, x_volume_other_scalers, "volume", stockCode)        # ------ 0 ~ 1정규화 -------
+    # save_scalers_x(x_investor_group_min, x_investor_group_max, x_investor_other_scalers, "investor", stockCode)
+    # save_scalers_x(x_short_group_min, x_short_group_max, x_short_other_scalers, "short", stockCode)
 
 
     # inference(x_volume, stockCode, x_volume_np)
@@ -123,12 +125,35 @@ def inference(x_data, stockCode):
 
     x_volume, x_investor, x_short = [], [], []
     for row in x_data:
-        base = list(row[0:6])                 # 시가·고가·저가·종가
+
+        ohlc = list(row[0:4])
+        ratio = [row[4]] 
+        volume = [row[5]]
+        investor = list(row[6:10]) # 9/10
+        short = list(row[12:14])
+        # -------MA------
+        ma_data = list(row[15:20]) # 7/10 + 임계값 조정 필요 (전체학습시엔 알아서 모델이 학습함)
+        ma_comp = list(row[20:30]) # 2/10 개선필요 (피처들 조합등으로 사용)
+        ma_diff = list(row[30:35]) # 8/10
+        ma = ma_data + ma_diff ### len: 10 ###
+        # ------MACD-----
+        macd = [row[35]]
+        signal = [row[36]]
+        histogram = [row[37]]
+        gt_signal = [row[38]]
+        histogram_positive = [row[39]]
+        macd_slope = [row[40]]
+        signal_slope = [row[41]]
+        histogram_slope = [row[42]]
+        macd_cross = [row[43]]
+
+        base = ohlc + volume # 시고저종 등락률 거래량 0 1 2 3 4 5
+
         # x_volume.append(base + [row[5]] + list(row[15:20]) + [row[20]])        # + volume
 
         # x_volume.append(base + list(row[15:]) + list(row[6:15])) # 시고저종, 거래량, 
 
-        x_volume.append([row[12]] + [row[13]])
+        x_volume.append(ohlc + ma + investor + [row[15]])
 
         x_investor.append(base + list(row[6:10]))   # + 개인·외국인·기관·프로그램
         x_short.append(base + list(row[10:15]))     # + 공매도·기술지표
@@ -142,11 +167,12 @@ def inference(x_data, stockCode):
     #   shared_idx=[0,1,2,3] → OHLC 네 열만 공통 스케일러 사용
     x_volume_np = norm.normalize_2d_array(
         x_volume,
-        # shared_idx=[0, 1, 2, 3, 6, 7, 8, 9, 10],
-        shared_idx=[0],
+        shared_idx=[0,1,2,3,4,5,6,7,8],
+        minus1to1_idx=[9, 10, 11, 12, 13    , 14, 15, 16, 17],
         g_min=x_volume_scaler["group_min"],
         g_max=x_volume_scaler["group_max"],
-        other_scalers=x_volume_scaler["other_scalers"]
+        other_scalers=x_volume_scaler["other_scalers"],
+        minus1to1_params=x_volume_scaler["minus1to1_params"]
     )[0]
 
     # x_investor_np = norm.normalize_2d_array(
@@ -214,7 +240,7 @@ def inference(x_data, stockCode):
 
 
 
-def save_scalers_x(x_group_min, x_group_max, x_other_scalers, x_type, stockCode):
+def save_scalers_x1(x_group_min, x_group_max, x_other_scalers, x_type, stockCode):
     save_obj = {
         "group_min": float(x_group_min),
         "group_max": float(x_group_max),
@@ -231,6 +257,24 @@ def save_scalers_y(y_scalers, y_type, stockCode):
     save_obj = {"scalers": y_scalers}
 
     out_path = Path("scalers") / stockCode / f"Y_{y_type}.pkl" # --------나중에 컨테이너로 올릴때 직접경로로 바꾸기---------
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    joblib.dump(save_obj, out_path)
+    print(f"스케일 저장 완료 - {out_path}")
+
+
+
+
+
+def save_scalers_x(x_group_min, x_group_max, x_other_scalers, minus1to1_params: dict, x_type, stockCode):
+    save_obj = {
+        "group_min": float(x_group_min),
+        "group_max": float(x_group_max),
+        "other_scalers": x_other_scalers,
+        "minus1to1_params": minus1to1_params  #추가
+    }
+
+    out_path = Path("scalers") / stockCode / f"X_{x_type}.pkl"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     joblib.dump(save_obj, out_path)
