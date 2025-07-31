@@ -52,25 +52,35 @@ def train_model(x_data, y_data, stockCode):
 
         #---------RSI--------
         rsi_data = [row[37]]
-        rsi_for_up = [row[38]]
+        rsi_for_up = [row[38]]  
         rsi_for_down = [row[39]]
+        rsi = rsi_for_up                # -1-
 
-        base = ohlc + volume # 시고저종 등락률 거래량 0 1 2 3 4 5
+        #----------Bollinger Band---------
+        bb_upper_close_gap = [row[40]]
+        bb_lower_close_gap = [row[41]]
+        bollinger = bb_lower_close_gap  # -1- 
+        
+
+        base = ohlc + volume + investor # -9-
+        technical = ma + rsi + bollinger    # -12-    
 
         # x_volume.append(base + [row[5]]) # ohlc + 거래량
         # x_volume.append(base + list(row[15:]) + list(row[6:15])) # 시고저종, 거래량, 
-        # x_volume.append(rsi_for_up + rsi_for_up)
-        x_volume.append(ma_data + ma_diff + investor + [row[15]] + rsi_for_up)
+        # x_volume.append([row[17]] + [row[32]] + bb_lower_close_gap)
+        # x_volume.append(ma_data + ma_diff + investor + [row[15]] + rsi_for_up)
+        x_volume.append(base + technical)
 
         x_investor.append(base + list(row[6:10]))
         x_short.append(base + list(row[10:15]))
 
     # OHLC(0~3)만 공통 스케일러로 묶음 ↓↓↓
-    x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0,1,2,3,4]) # ------ 0 ~ 1정규화 -------
+    # x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0,1,2,3,4]) # ------ 0 ~ 1정규화 -------
     # x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0]) # ------ 0 ~ 1정규화 ------- <단일피처 중요도 확인용>
+    x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers = norm.normalize_2d_array(x_volume, shared_idx=[0, 1, 2, 3, 9, 10, 11, 12, 13]) # ------ 0 ~ 1정규화 ------- <정규화 차이 확인용>
     # x_volume_np, (x_volume_group_min, x_volume_group_max), x_volume_other_scalers, x_volume_minus1to1_params = norm.normalize_2d_array(x_volume, 
-    #                                                                                                         shared_idx=[0,1,2,3,4,5,6,7,8],
-    #                                                                                                         minus1to1_idx=[9, 10, 11, 12, 13    , 14, 15, 16, 17]
+    #                                                                                                         shared_idx=[0, 1, 2, 3, 9, 10, 11, 12, 13],
+    #                                                                                                         minus1to1_idx=[5, 6, 7, 8   , 14, 15, 16, 17, 18    , 20]
     #                                                                                                         )                     # ---------------------- -1 ~ 1정규화 ----------------
 
     # x_investor_np, (x_investor_group_min, x_investor_group_max), x_investor_other_scalers = \
